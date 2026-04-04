@@ -1,0 +1,3 @@
+package_name = "dev.luxxy.supportsystem"
+name = "Support Center"
+panel_version = ">=1.0.0"
