@@ -418,7 +418,7 @@ export default function AdminSupportSettingsPage() {
                       onChange={(event) =>
                         setSettingsForm((current) => ({
                           ...current,
-                          discordWebhookUrl: event.currentTarget.value,
+                          discordWebhookUrl: event?.currentTarget?.value ?? '',
                         }))
                       }
                     />
@@ -527,7 +527,7 @@ export default function AdminSupportSettingsPage() {
                     label='Name'
                     value={categoryForm.name}
                     onChange={(event) =>
-                      setCategoryForm((current) => ({ ...current, name: event.currentTarget.value }))
+                      setCategoryForm((current) => ({ ...current, name: event?.currentTarget?.value ?? '' }))
                     }
                   />
 
@@ -535,7 +535,7 @@ export default function AdminSupportSettingsPage() {
                     label='Description'
                     value={categoryForm.description}
                     onChange={(event) =>
-                      setCategoryForm((current) => ({ ...current, description: event.currentTarget.value }))
+                      setCategoryForm((current) => ({ ...current, description: event?.currentTarget?.value ?? '' }))
                     }
                   />
 
@@ -544,7 +544,7 @@ export default function AdminSupportSettingsPage() {
                     placeholder='#4f46e5'
                     value={categoryForm.color}
                     onChange={(event) =>
-                      setCategoryForm((current) => ({ ...current, color: event.currentTarget.value }))
+                      setCategoryForm((current) => ({ ...current, color: event?.currentTarget?.value ?? '' }))
                     }
                   />
 

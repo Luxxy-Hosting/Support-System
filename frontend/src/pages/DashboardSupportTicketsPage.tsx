@@ -4,10 +4,10 @@ import { useNavigate } from 'react-router';
 import { httpErrorToHuman } from '@/api/axios.ts';
 import Button from '@/elements/Button.tsx';
 import AccountContentContainer from '@/elements/containers/AccountContentContainer.tsx';
+import TextInput from '@/elements/input/TextInput.tsx';
 import ScreenBlock from '@/elements/ScreenBlock.tsx';
 import Spinner from '@/elements/Spinner.tsx';
 import Table, { TableData, TableRow } from '@/elements/Table.tsx';
-import TextInput from '@/elements/input/TextInput.tsx';
 import { useToast } from '@/providers/ToastProvider.tsx';
 import { getClientBootstrap, getClientTickets } from '../api/client.ts';
 import TicketPriorityBadge from '../components/TicketPriorityBadge.tsx';
@@ -111,7 +111,7 @@ export default function DashboardSupportTicketsPage() {
             label='Search Tickets'
             value={search}
             onChange={(event) => {
-              setSearch(event.currentTarget.value);
+              setSearch(event?.currentTarget?.value ?? '');
               setPage(1);
             }}
           />
@@ -161,10 +161,14 @@ export default function DashboardSupportTicketsPage() {
                 <Text size='sm'>{formatTicketDateTime(ticket.lastReplyAt ?? ticket.created)}</Text>
               </TableData>
               <TableData>
-                <Button variant='light' color='gray' onClick={(event) => {
-                  event.stopPropagation();
-                  navigate(`/account/support/${ticket.uuid}`);
-                }}>
+                <Button
+                  variant='light'
+                  color='gray'
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    navigate(`/account/support/${ticket.uuid}`);
+                  }}
+                >
                   Open
                 </Button>
               </TableData>

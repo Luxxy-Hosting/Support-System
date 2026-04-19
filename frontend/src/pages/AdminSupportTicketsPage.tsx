@@ -5,10 +5,10 @@ import { httpErrorToHuman } from '@/api/axios.ts';
 import Button from '@/elements/Button.tsx';
 import Card from '@/elements/Card.tsx';
 import AdminContentContainer from '@/elements/containers/AdminContentContainer.tsx';
+import TextInput from '@/elements/input/TextInput.tsx';
 import ScreenBlock from '@/elements/ScreenBlock.tsx';
 import Spinner from '@/elements/Spinner.tsx';
 import Table, { TableData, TableRow } from '@/elements/Table.tsx';
-import TextInput from '@/elements/input/TextInput.tsx';
 import { useAdminCan } from '@/plugins/usePermissions.ts';
 import { useToast } from '@/providers/ToastProvider.tsx';
 import { getAdminBootstrap, getAdminTickets } from '../api/client.ts';
@@ -145,11 +145,7 @@ export default function AdminSupportTicketsPage() {
       <Stack gap='md'>
         {(canManageSettings || canManageCategories) && (
           <Group justify='flex-end'>
-            <Button
-              variant='light'
-              color='gray'
-              onClick={() => navigate('/admin/extensions/dev.luxxy.supportsystem')}
-            >
+            <Button variant='light' color='gray' onClick={() => navigate('/admin/extensions/dev.luxxy.supportsystem')}>
               Extension Settings
             </Button>
           </Group>
@@ -164,7 +160,7 @@ export default function AdminSupportTicketsPage() {
               label='Search'
               value={search}
               onChange={(event) => {
-                setSearch(event.currentTarget.value);
+                setSearch(event?.currentTarget?.value ?? '');
                 setPage(1);
               }}
             />
@@ -207,7 +203,7 @@ export default function AdminSupportTicketsPage() {
               label='Client'
               value={clientFilter}
               onChange={(event) => {
-                setClientFilter(event.currentTarget.value);
+                setClientFilter(event?.currentTarget?.value ?? '');
                 setPage(1);
               }}
             />
@@ -215,7 +211,7 @@ export default function AdminSupportTicketsPage() {
               label='Linked Server'
               value={serverFilter}
               onChange={(event) => {
-                setServerFilter(event.currentTarget.value);
+                setServerFilter(event?.currentTarget?.value ?? '');
                 setPage(1);
               }}
             />
@@ -240,7 +236,11 @@ export default function AdminSupportTicketsPage() {
           onPageSelect={setPage}
         >
           {tickets.data.map((ticket) => (
-            <TableRow key={ticket.uuid} className='support-ticket-row' onClick={() => navigate(`/admin/support/${ticket.uuid}`)}>
+            <TableRow
+              key={ticket.uuid}
+              className='support-ticket-row'
+              onClick={() => navigate(`/admin/support/${ticket.uuid}`)}
+            >
               <TableData>
                 <Stack gap={4}>
                   <Text fw={600}>{ticket.subject}</Text>
@@ -260,10 +260,14 @@ export default function AdminSupportTicketsPage() {
               <TableData>{buildUserDisplayName(ticket.assignedUser)}</TableData>
               <TableData>{formatTicketDateTime(ticket.lastReplyAt ?? ticket.created)}</TableData>
               <TableData>
-                <Button variant='light' color='gray' onClick={(event) => {
-                  event.stopPropagation();
-                  navigate(`/admin/support/${ticket.uuid}`);
-                }}>
+                <Button
+                  variant='light'
+                  color='gray'
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    navigate(`/admin/support/${ticket.uuid}`);
+                  }}
+                >
                   Open
                 </Button>
               </TableData>

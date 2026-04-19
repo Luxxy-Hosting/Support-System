@@ -73,14 +73,14 @@ export default function DashboardSupportCreatePage() {
   );
 
   const rateLimitDescription =
-    bootstrap.settings.createTicketRateLimitHits > 0
+    (bootstrap?.settings.createTicketRateLimitHits ?? 0) > 0
       ? `New ticket creation is limited to ${bootstrap.settings.createTicketRateLimitHits} ticket${
           bootstrap.settings.createTicketRateLimitHits === 1 ? '' : 's'
         } every ${bootstrap.settings.createTicketRateLimitWindowSeconds} seconds.`
       : null;
 
   const openTicketLimitDescription =
-    bootstrap.settings.maxOpenTicketsPerUser > 0
+    (bootstrap?.settings.maxOpenTicketsPerUser ?? 0) > 0
       ? `You can have up to ${bootstrap.settings.maxOpenTicketsPerUser} open ticket${
           bootstrap.settings.maxOpenTicketsPerUser === 1 ? '' : 's'
         } at a time.`
@@ -178,7 +178,11 @@ export default function DashboardSupportCreatePage() {
           />
         )}
 
-        <TextInput label='Subject' value={subject} onChange={(event) => setSubject(event.currentTarget.value)} />
+        <TextInput
+          label='Subject'
+          value={subject}
+          onChange={(event) => setSubject(event?.currentTarget?.value ?? '')}
+        />
 
         <div>
           <Text size='sm' fw={500} mb={6}>
@@ -200,7 +204,7 @@ export default function DashboardSupportCreatePage() {
           autosize
           minRows={4}
           value={additionalContext}
-          onChange={(event) => setAdditionalContext(event.currentTarget.value)}
+          onChange={(event) => setAdditionalContext(event?.currentTarget?.value ?? '')}
         />
 
         <Group justify='flex-end'>
