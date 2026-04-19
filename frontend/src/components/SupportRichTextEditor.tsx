@@ -1,4 +1,4 @@
-import { RichTextEditor, Link } from '@mantine/tiptap';
+import { Link, RichTextEditor } from '@mantine/tiptap';
 import Placeholder from '@tiptap/extension-placeholder';
 import { useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';

@@ -141,12 +141,19 @@ pub async fn send_ticket_event(
                 .as_deref()
                 .map(|value| format!(" (@{})", escape_markdown(value)))
                 .unwrap_or_default();
-            format!("**Actor:** {}{}", escape_markdown(actor_display_name), actor_username_suffix)
+            format!(
+                "**Actor:** {}{}",
+                escape_markdown(actor_display_name),
+                actor_username_suffix
+            )
         });
 
     let mut description_lines = vec![
         format!("**Ticket:** {ticket_line}"),
-        format!("**Client:** @{}", escape_markdown(&detail.ticket.creator.username)),
+        format!(
+            "**Client:** @{}",
+            escape_markdown(&detail.ticket.creator.username)
+        ),
         format!("**Linked Server:** {server_line}"),
     ];
 
@@ -309,7 +316,10 @@ fn humanize_slug(value: &str) -> String {
 }
 
 fn escape_markdown(value: &str) -> String {
-    value.replace('*', "\\*").replace('_', "\\_").replace('`', "\\`")
+    value
+        .replace('*', "\\*")
+        .replace('_', "\\_")
+        .replace('`', "\\`")
 }
 
 fn escape_markdown_link_label(value: &str) -> String {
@@ -352,7 +362,11 @@ fn resolve_app_icon_url(panel_url: &str, icon: &str) -> Option<String> {
         return Some(format!("{}{}", panel_url.trim_end_matches('/'), trimmed));
     }
 
-    Some(format!("{}/{}", panel_url.trim_end_matches('/'), trimmed.trim_start_matches('/')))
+    Some(format!(
+        "{}/{}",
+        panel_url.trim_end_matches('/'),
+        trimmed.trim_start_matches('/')
+    ))
 }
 
 fn truncate_for_discord(value: &str, max_len: usize) -> String {
@@ -361,7 +375,10 @@ fn truncate_for_discord(value: &str, max_len: usize) -> String {
         return trimmed.to_string();
     }
 
-    let truncated = trimmed.chars().take(max_len.saturating_sub(1)).collect::<String>();
+    let truncated = trimmed
+        .chars()
+        .take(max_len.saturating_sub(1))
+        .collect::<String>();
     format!("{}…", truncated.trim_end())
 }
 

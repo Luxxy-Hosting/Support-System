@@ -1,6 +1,6 @@
 import { Avatar, Group, Stack, Text } from '@mantine/core';
-import Card from '@/elements/Card.tsx';
 import Badge from '@/elements/Badge.tsx';
+import Card from '@/elements/Card.tsx';
 import { formatTicketDateTime, humanizeTicketActor } from '../helpers/tickets.ts';
 import type { TicketMessage } from '../types/index.ts';
 import SupportMessageAttachments from './SupportMessageAttachments.tsx';
@@ -13,7 +13,11 @@ interface Props {
 }
 
 const avatarInitials = (message: TicketMessage): string => {
-  const source = (message.authorDisplayName || message.authorUsername || humanizeTicketActor(message.authorType)).trim();
+  const source = (
+    message.authorDisplayName ||
+    message.authorUsername ||
+    humanizeTicketActor(message.authorType)
+  ).trim();
   const parts = source.split(/\s+/).filter(Boolean);
 
   if (!parts.length) {
@@ -44,11 +48,7 @@ const avatarColor = (message: TicketMessage): string => {
   }
 };
 
-export default function TicketConversation({
-  messages,
-  emptyText = 'No messages yet.',
-  scrollable = false,
-}: Props) {
+export default function TicketConversation({ messages, emptyText = 'No messages yet.', scrollable = false }: Props) {
   if (!messages.length) {
     return <Text c='dimmed'>{emptyText}</Text>;
   }
@@ -59,7 +59,13 @@ export default function TicketConversation({
         <Card
           key={message.uuid}
           className={`support-ticket-message-card ${message.isInternal ? 'border-amber-500/35!' : ''}`.trim()}
-          leftStripeClassName={message.isInternal ? 'bg-amber-500/70' : message.authorType === 'staff' ? 'bg-blue-500/60' : 'bg-violet-500/60'}
+          leftStripeClassName={
+            message.isInternal
+              ? 'bg-amber-500/70'
+              : message.authorType === 'staff'
+                ? 'bg-blue-500/60'
+                : 'bg-violet-500/60'
+          }
         >
           <div className='support-ticket-message-shell'>
             <Avatar

@@ -8,12 +8,19 @@ import AccountContentContainer from '@/elements/containers/AccountContentContain
 import ScreenBlock from '@/elements/ScreenBlock.tsx';
 import Spinner from '@/elements/Spinner.tsx';
 import { useToast } from '@/providers/ToastProvider.tsx';
-import { addClientReply, addClientReplyUpload, getClientBootstrap, getClientTicket, updateClientTicketStatus } from '../api/client.ts';
+import {
+  addClientReply,
+  addClientReplyUpload,
+  getClientBootstrap,
+  getClientTicket,
+  updateClientTicketStatus,
+} from '../api/client.ts';
 import SupportAttachmentPicker from '../components/SupportAttachmentPicker.tsx';
 import SupportRichTextEditor from '../components/SupportRichTextEditor.tsx';
 import TicketConversation from '../components/TicketConversation.tsx';
 import TicketPriorityBadge from '../components/TicketPriorityBadge.tsx';
 import TicketStatusBadge from '../components/TicketStatusBadge.tsx';
+import { isRichTextEmpty } from '../helpers/richText.ts';
 import {
   describeLinkedServer,
   extractClientMetadata,
@@ -21,7 +28,6 @@ import {
   humanizeTicketActor,
   humanizeTicketStatus,
 } from '../helpers/tickets.ts';
-import { isRichTextEmpty } from '../helpers/richText.ts';
 import type { ClientTicketBootstrap, TicketDetail } from '../types/index.ts';
 
 function SidebarDetailRow({ label, value }: { label: string; value: ReactNode }) {
@@ -146,12 +152,10 @@ export default function DashboardSupportTicketPage() {
   const linkedServerPath = detail?.ticket.linkedServer.currentUuidShort
     ? `/server/${detail.ticket.linkedServer.currentUuidShort}`
     : null;
-  const canReply = detail && bootstrap
-    ? detail.ticket.status !== 'closed' || bootstrap.settings.allowReplyOnClosed
-    : false;
-  const canClose = detail && bootstrap
-    ? bootstrap.settings.allowClientClose && detail.ticket.status !== 'closed'
-    : false;
+  const canReply =
+    detail && bootstrap ? detail.ticket.status !== 'closed' || bootstrap.settings.allowReplyOnClosed : false;
+  const canClose =
+    detail && bootstrap ? bootstrap.settings.allowClientClose && detail.ticket.status !== 'closed' : false;
   const canReopen = detail?.ticket.status === 'closed';
 
   const refreshTicket = async (nextTicket: TicketDetail) => {
@@ -167,12 +171,13 @@ export default function DashboardSupportTicketPage() {
 
     try {
       setReplyLoading(true);
-      const nextTicket = replyAttachments.length > 0
-        ? await addClientReplyUpload(ticketUuid, {
-            body: isRichTextEmpty(replyBody) ? '' : replyBody,
-            files: replyAttachments,
-          })
-        : await addClientReply(ticketUuid, replyBody);
+      const nextTicket =
+        replyAttachments.length > 0
+          ? await addClientReplyUpload(ticketUuid, {
+              body: isRichTextEmpty(replyBody) ? '' : replyBody,
+              files: replyAttachments,
+            })
+          : await addClientReply(ticketUuid, replyBody);
       await refreshTicket(nextTicket);
       addToast('Reply sent.', 'success');
     } catch (error) {
@@ -216,7 +221,7 @@ export default function DashboardSupportTicketPage() {
   }
 
   return (
-    <AccountContentContainer title={detail.ticket.subject}>
+    <AccountContentContainer title={detail.ticket.subject} hideTitleComponent>
       <Group justify='space-between' align='start' mb='md'>
         <div>
           <Title order={1} c='white'>
@@ -322,13 +327,13 @@ export default function DashboardSupportTicketPage() {
                     <SidebarDetailRow
                       label='Server'
                       value={
-                        linkedServerPath
-                          ? (
-                              <SidebarValueLink to={linkedServerPath}>
-                                {describeLinkedServer(detail.ticket.linkedServer)}
-                              </SidebarValueLink>
-                            )
-                          : describeLinkedServer(detail.ticket.linkedServer)
+                        linkedServerPath ? (
+                          <SidebarValueLink to={linkedServerPath}>
+                            {describeLinkedServer(detail.ticket.linkedServer)}
+                          </SidebarValueLink>
+                        ) : (
+                          describeLinkedServer(detail.ticket.linkedServer)
+                        )
                       }
                     />
                     {detail.ticket.linkedServer.currentStatus && (

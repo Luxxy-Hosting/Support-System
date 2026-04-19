@@ -92,6 +92,9 @@ pub struct ApiTicketSettings {
     pub categories_enabled: bool,
     pub allow_client_close: bool,
     pub allow_reply_on_closed: bool,
+    pub create_ticket_rate_limit_hits: i32,
+    pub create_ticket_rate_limit_window_seconds: i32,
+    pub max_open_tickets_per_user: i32,
     pub created: chrono::DateTime<chrono::Utc>,
     pub updated: chrono::DateTime<chrono::Utc>,
 }
@@ -326,6 +329,12 @@ pub struct AdminUpdateTicketSettingsRequest {
     pub allow_client_close: bool,
     #[garde(skip)]
     pub allow_reply_on_closed: bool,
+    #[garde(range(min = 0, max = 10_000))]
+    pub create_ticket_rate_limit_hits: i32,
+    #[garde(range(min = 1, max = 86_400))]
+    pub create_ticket_rate_limit_window_seconds: i32,
+    #[garde(range(min = 0, max = 1_000))]
+    pub max_open_tickets_per_user: i32,
     #[garde(skip)]
     pub discord_webhook_enabled: bool,
     #[garde(length(chars, max = 2048))]

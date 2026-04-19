@@ -83,7 +83,9 @@ pub async fn parse_create_ticket_form(
     })
 }
 
-pub async fn parse_message_form(mut multipart: Multipart) -> Result<MessageMultipartForm, anyhow::Error> {
+pub async fn parse_message_form(
+    mut multipart: Multipart,
+) -> Result<MessageMultipartForm, anyhow::Error> {
     let mut body = String::new();
     let mut is_internal = false;
     let mut attachments = Vec::new();
@@ -128,7 +130,9 @@ fn parse_optional_uuid(value: &str) -> Result<Option<uuid::Uuid>, anyhow::Error>
     })?))
 }
 
-fn enforce_attachment_limits(attachments: &[IncomingAttachmentUpload]) -> Result<(), anyhow::Error> {
+fn enforce_attachment_limits(
+    attachments: &[IncomingAttachmentUpload],
+) -> Result<(), anyhow::Error> {
     if attachments.len() > MAX_ATTACHMENTS_PER_MESSAGE {
         return Err(DisplayError::new(format!(
             "you can upload up to {MAX_ATTACHMENTS_PER_MESSAGE} attachments per message"
@@ -205,7 +209,7 @@ fn classify_media_type(content_type: &str) -> Result<String, anyhow::Error> {
                 "attachments must be PNG, JPEG, GIF, WebP, AVIF, MP4, WebM, OGG, or MOV",
             )
             .with_status(StatusCode::BAD_REQUEST)
-            .into())
+            .into());
         }
     };
 

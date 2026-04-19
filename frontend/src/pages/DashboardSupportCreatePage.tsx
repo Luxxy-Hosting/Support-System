@@ -4,16 +4,16 @@ import { useNavigate } from 'react-router';
 import { httpErrorToHuman } from '@/api/axios.ts';
 import Button from '@/elements/Button.tsx';
 import AccountContentContainer from '@/elements/containers/AccountContentContainer.tsx';
-import ScreenBlock from '@/elements/ScreenBlock.tsx';
-import Spinner from '@/elements/Spinner.tsx';
 import TextArea from '@/elements/input/TextArea.tsx';
 import TextInput from '@/elements/input/TextInput.tsx';
+import ScreenBlock from '@/elements/ScreenBlock.tsx';
+import Spinner from '@/elements/Spinner.tsx';
 import { useToast } from '@/providers/ToastProvider.tsx';
 import { createClientTicket, createClientTicketUpload, getClientBootstrap } from '../api/client.ts';
 import SupportAttachmentPicker from '../components/SupportAttachmentPicker.tsx';
 import SupportRichTextEditor from '../components/SupportRichTextEditor.tsx';
-import { buildServerOptionLabel } from '../helpers/tickets.ts';
 import { isRichTextEmpty } from '../helpers/richText.ts';
+import { buildServerOptionLabel } from '../helpers/tickets.ts';
 import type { ClientTicketBootstrap } from '../types/index.ts';
 
 export default function DashboardSupportCreatePage() {
@@ -72,6 +72,20 @@ export default function DashboardSupportCreatePage() {
     [bootstrap?.categories],
   );
 
+  const rateLimitDescription =
+    bootstrap.settings.createTicketRateLimitHits > 0
+      ? `New ticket creation is limited to ${bootstrap.settings.createTicketRateLimitHits} ticket${
+          bootstrap.settings.createTicketRateLimitHits === 1 ? '' : 's'
+        } every ${bootstrap.settings.createTicketRateLimitWindowSeconds} seconds.`
+      : null;
+
+  const openTicketLimitDescription =
+    bootstrap.settings.maxOpenTicketsPerUser > 0
+      ? `You can have up to ${bootstrap.settings.maxOpenTicketsPerUser} open ticket${
+          bootstrap.settings.maxOpenTicketsPerUser === 1 ? '' : 's'
+        } at a time.`
+      : null;
+
   const handleSubmit = async () => {
     try {
       setSubmitting(true);
@@ -88,12 +102,13 @@ export default function DashboardSupportCreatePage() {
           : undefined,
       };
 
-      const ticket = attachments.length > 0
-        ? await createClientTicketUpload({
-            ...payload,
-            files: attachments,
-          })
-        : await createClientTicket(payload);
+      const ticket =
+        attachments.length > 0
+          ? await createClientTicketUpload({
+              ...payload,
+              files: attachments,
+            })
+          : await createClientTicket(payload);
 
       addToast('Ticket created successfully.', 'success');
       navigate(`/account/support/${ticket.ticket.uuid}`);
@@ -127,9 +142,12 @@ export default function DashboardSupportCreatePage() {
           <Title order={1} c='white'>
             Create Ticket
           </Title>
-          <Text c='dimmed'>
-            Create a general support request or attach it to one of your servers.
-          </Text>
+          <Text c='dimmed'>Create a general support request or attach it to one of your servers.</Text>
+          {(rateLimitDescription || openTicketLimitDescription) && (
+            <Text c='dimmed' size='sm' mt={4}>
+              {[openTicketLimitDescription, rateLimitDescription].filter(Boolean).join(' ')}
+            </Text>
+          )}
         </div>
         <Button variant='light' color='gray' onClick={() => navigate('/account/support')}>
           Back to Tickets

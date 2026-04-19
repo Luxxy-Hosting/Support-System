@@ -100,14 +100,6 @@ export default function DashboardSupportTicketsPage() {
   return (
     <AccountContentContainer title='Support'>
       <Group justify='space-between' align='end' mb='md'>
-        <div>
-          <Title order={1} c='white'>
-            Support
-          </Title>
-          <Text c='dimmed'>
-            Open tickets, follow replies, and create new hosting support requests.
-          </Text>
-        </div>
         <Button color='blue' onClick={() => navigate('/account/support/new')}>
           Create Ticket
         </Button>

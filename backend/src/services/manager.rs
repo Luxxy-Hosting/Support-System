@@ -11,6 +11,7 @@ use crate::{
         DiscordWebhookConfig, DiscordWebhookEvent, DiscordWebhookEventKind, send_ticket_event,
     },
 };
+use axum::http::StatusCode;
 use chrono::Utc;
 use reqwest::Url;
 use serde_json::json;
@@ -31,6 +32,9 @@ struct TicketSettingsRow {
     categories_enabled: bool,
     allow_client_close: bool,
     allow_reply_on_closed: bool,
+    create_ticket_rate_limit_hits: i32,
+    create_ticket_rate_limit_window_seconds: i32,
+    max_open_tickets_per_user: i32,
     discord_webhook_enabled: bool,
     discord_webhook_url: Option<String>,
     discord_notify_on_ticket_created: bool,
@@ -298,6 +302,9 @@ fn to_settings_api(row: TicketSettingsRow) -> ApiTicketSettings {
         categories_enabled: row.categories_enabled,
         allow_client_close: row.allow_client_close,
         allow_reply_on_closed: row.allow_reply_on_closed,
+        create_ticket_rate_limit_hits: row.create_ticket_rate_limit_hits,
+        create_ticket_rate_limit_window_seconds: row.create_ticket_rate_limit_window_seconds,
+        max_open_tickets_per_user: row.max_open_tickets_per_user,
         created: row.created.and_utc(),
         updated: row.updated.and_utc(),
     }
@@ -586,18 +593,21 @@ async fn load_attachment_bytes_from_storage(
                 .expect("filesystem storage driver must provide a filesystem")?;
             drop(settings);
 
-            let mut file = base_filesystem.async_open(storage_path).await.map_err(|err| {
-                if err
-                    .downcast_ref::<std::io::Error>()
-                    .is_some_and(|io_error| io_error.kind() == std::io::ErrorKind::NotFound)
-                {
-                    DisplayError::new("attachment not found")
-                        .with_status(axum::http::StatusCode::NOT_FOUND)
-                        .into()
-                } else {
-                    err
-                }
-            })?;
+            let mut file = base_filesystem
+                .async_open(storage_path)
+                .await
+                .map_err(|err| {
+                    if err
+                        .downcast_ref::<std::io::Error>()
+                        .is_some_and(|io_error| io_error.kind() == std::io::ErrorKind::NotFound)
+                    {
+                        DisplayError::new("attachment not found")
+                            .with_status(axum::http::StatusCode::NOT_FOUND)
+                            .into()
+                    } else {
+                        err
+                    }
+                })?;
 
             let mut bytes = Vec::new();
             file.read_to_end(&mut bytes).await?;
@@ -682,7 +692,9 @@ fn validate_category_color(color: Option<&str>) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn normalize_metadata(metadata: Option<serde_json::Value>) -> Result<serde_json::Value, anyhow::Error> {
+fn normalize_metadata(
+    metadata: Option<serde_json::Value>,
+) -> Result<serde_json::Value, anyhow::Error> {
     match metadata {
         None => Ok(json!({})),
         Some(serde_json::Value::Object(map)) => {
@@ -719,7 +731,9 @@ fn normalize_discord_webhook_url(value: Option<String>) -> Result<Option<String>
     );
 
     if !is_supported_host || !parsed.path().starts_with("/api/webhooks/") {
-        return Err(DisplayError::new("discord webhook url must be a Discord incoming webhook").into());
+        return Err(
+            DisplayError::new("discord webhook url must be a Discord incoming webhook").into(),
+        );
     }
 
     Ok(Some(webhook_url))
@@ -748,6 +762,9 @@ async fn get_or_create_settings_row(state: &State) -> Result<TicketSettingsRow, 
             categories_enabled,
             allow_client_close,
             allow_reply_on_closed,
+            create_ticket_rate_limit_hits,
+            create_ticket_rate_limit_window_seconds,
+            max_open_tickets_per_user,
             discord_webhook_enabled,
             discord_webhook_url,
             discord_notify_on_ticket_created,
@@ -776,6 +793,9 @@ async fn get_or_create_settings_row(state: &State) -> Result<TicketSettingsRow, 
             categories_enabled,
             allow_client_close,
             allow_reply_on_closed,
+            create_ticket_rate_limit_hits,
+            create_ticket_rate_limit_window_seconds,
+            max_open_tickets_per_user,
             discord_webhook_enabled,
             discord_notify_on_ticket_created,
             discord_notify_on_client_reply,
@@ -785,12 +805,15 @@ async fn get_or_create_settings_row(state: &State) -> Result<TicketSettingsRow, 
             discord_notify_on_assignment_change,
             discord_notify_on_ticket_deleted
         )
-        VALUES (TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, TRUE, FALSE, TRUE, TRUE, FALSE)
+        VALUES (TRUE, TRUE, FALSE, 20, 300, 0, FALSE, TRUE, TRUE, TRUE, FALSE, TRUE, TRUE, FALSE)
         RETURNING
             uuid,
             categories_enabled,
             allow_client_close,
             allow_reply_on_closed,
+            create_ticket_rate_limit_hits,
+            create_ticket_rate_limit_window_seconds,
+            max_open_tickets_per_user,
             discord_webhook_enabled,
             discord_webhook_url,
             discord_notify_on_ticket_created,
@@ -842,7 +865,9 @@ async fn build_ticket_detail(
     .bind(ticket_uuid)
     .fetch_optional(state.database.read())
     .await?
-    .ok_or_else(|| DisplayError::new("ticket not found").with_status(axum::http::StatusCode::NOT_FOUND))?;
+    .ok_or_else(|| {
+        DisplayError::new("ticket not found").with_status(axum::http::StatusCode::NOT_FOUND)
+    })?;
 
     let messages = sqlx::query_as::<_, TicketMessageRow>(
         r#"
@@ -866,8 +891,7 @@ async fn build_ticket_detail(
     .bind(ticket_uuid)
     .bind(include_internal)
     .fetch_all(state.database.read())
-    .await?
-    ;
+    .await?;
 
     let attachment_rows = sqlx::query_as::<_, TicketAttachmentRow>(
         r#"
@@ -1005,7 +1029,9 @@ async fn create_message_with_attachments(
             let reader = StreamReader::new(futures_util::stream::iter(vec![Ok::<
                 axum::body::Bytes,
                 std::io::Error,
-            >(attachment.data)]));
+            >(
+                attachment.data
+            )]));
 
             let stored_size = state
                 .storage
@@ -1083,7 +1109,9 @@ async fn insert_audit_event(
     .bind(ticket_uuid)
     .bind(actor.and_then(|value| value.user_uuid))
     .bind(actor.map(|value| value.username))
-    .bind(actor.map_or(TicketActorType::System.as_str(), |value| value.actor_type.as_str()))
+    .bind(actor.map_or(TicketActorType::System.as_str(), |value| {
+        value.actor_type.as_str()
+    }))
     .bind(event)
     .bind(payload)
     .execute(state.database.write())
@@ -1118,7 +1146,10 @@ async fn dispatch_discord_webhook_event(
     }
 }
 
-async fn ensure_staff_candidate(state: &State, user_uuid: uuid::Uuid) -> Result<User, anyhow::Error> {
+async fn ensure_staff_candidate(
+    state: &State,
+    user_uuid: uuid::Uuid,
+) -> Result<User, anyhow::Error> {
     let user = User::by_uuid_optional(&state.database, user_uuid)
         .await?
         .ok_or_else(|| DisplayError::new("assigned user not found"))?;
@@ -1192,7 +1223,9 @@ pub async fn get_client_bootstrap(
     })
 }
 
-pub async fn get_admin_bootstrap(state: &State) -> Result<AdminTicketBootstrapResponse, anyhow::Error> {
+pub async fn get_admin_bootstrap(
+    state: &State,
+) -> Result<AdminTicketBootstrapResponse, anyhow::Error> {
     Ok(AdminTicketBootstrapResponse {
         settings: to_settings_api(get_or_create_settings_row(state).await?),
         categories: list_categories(state, false).await?,
@@ -1254,7 +1287,15 @@ pub async fn list_staff_users(state: &State) -> Result<Vec<ApiTicketUserSummary>
 
     Ok(rows
         .into_iter()
-        .map(|row| to_user_summary(row.uuid, row.username, row.name_first, row.name_last, row.admin))
+        .map(|row| {
+            to_user_summary(
+                row.uuid,
+                row.username,
+                row.name_first,
+                row.name_last,
+                row.admin,
+            )
+        })
         .collect())
 }
 
@@ -1314,7 +1355,10 @@ pub async fn upsert_category(
     Ok(to_category_api(row))
 }
 
-pub async fn delete_category(state: &State, category_uuid: uuid::Uuid) -> Result<(), anyhow::Error> {
+pub async fn delete_category(
+    state: &State,
+    category_uuid: uuid::Uuid,
+) -> Result<(), anyhow::Error> {
     let rows_affected = sqlx::query(
         r#"
         DELETE FROM ext_support_ticket_categories
@@ -1340,6 +1384,9 @@ pub async fn update_settings(
     categories_enabled: bool,
     allow_client_close: bool,
     allow_reply_on_closed: bool,
+    create_ticket_rate_limit_hits: i32,
+    create_ticket_rate_limit_window_seconds: i32,
+    max_open_tickets_per_user: i32,
     discord_webhook_enabled: bool,
     discord_webhook_url: Option<String>,
     discord_notify_on_ticket_created: bool,
@@ -1354,7 +1401,10 @@ pub async fn update_settings(
     let discord_webhook_url = normalize_discord_webhook_url(discord_webhook_url)?;
 
     if discord_webhook_enabled && discord_webhook_url.is_none() {
-        return Err(DisplayError::new("discord webhook url is required when webhook delivery is enabled").into());
+        return Err(DisplayError::new(
+            "discord webhook url is required when webhook delivery is enabled",
+        )
+        .into());
     }
 
     let row = sqlx::query_as::<_, TicketSettingsRow>(
@@ -1363,15 +1413,18 @@ pub async fn update_settings(
         SET categories_enabled = $2,
             allow_client_close = $3,
             allow_reply_on_closed = $4,
-            discord_webhook_enabled = $5,
-            discord_webhook_url = $6,
-            discord_notify_on_ticket_created = $7,
-            discord_notify_on_client_reply = $8,
-            discord_notify_on_staff_reply = $9,
-            discord_notify_on_internal_note = $10,
-            discord_notify_on_status_change = $11,
-            discord_notify_on_assignment_change = $12,
-            discord_notify_on_ticket_deleted = $13,
+            create_ticket_rate_limit_hits = $5,
+            create_ticket_rate_limit_window_seconds = $6,
+            max_open_tickets_per_user = $7,
+            discord_webhook_enabled = $8,
+            discord_webhook_url = $9,
+            discord_notify_on_ticket_created = $10,
+            discord_notify_on_client_reply = $11,
+            discord_notify_on_staff_reply = $12,
+            discord_notify_on_internal_note = $13,
+            discord_notify_on_status_change = $14,
+            discord_notify_on_assignment_change = $15,
+            discord_notify_on_ticket_deleted = $16,
             updated = NOW()
         WHERE uuid = $1
         RETURNING
@@ -1379,6 +1432,9 @@ pub async fn update_settings(
             categories_enabled,
             allow_client_close,
             allow_reply_on_closed,
+            create_ticket_rate_limit_hits,
+            create_ticket_rate_limit_window_seconds,
+            max_open_tickets_per_user,
             discord_webhook_enabled,
             discord_webhook_url,
             discord_notify_on_ticket_created,
@@ -1396,6 +1452,9 @@ pub async fn update_settings(
     .bind(categories_enabled)
     .bind(allow_client_close)
     .bind(allow_reply_on_closed)
+    .bind(create_ticket_rate_limit_hits)
+    .bind(create_ticket_rate_limit_window_seconds)
+    .bind(max_open_tickets_per_user)
     .bind(discord_webhook_enabled)
     .bind(discord_webhook_url)
     .bind(discord_notify_on_ticket_created)
@@ -1423,10 +1482,13 @@ pub async fn list_client_tickets(
     query.push(" WHERE t.deleted_at IS NULL AND t.creator_user_uuid = ");
     query.push_bind(user.uuid);
 
-    if let Some(search) = params.search.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
-        query.push(
-            " AND (t.subject ILIKE '%' || ",
-        );
+    if let Some(search) = params
+        .search
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        query.push(" AND (t.subject ILIKE '%' || ");
         query.push_bind(search);
         query.push(" || '%' OR creator.username ILIKE '%' || ");
         query.push_bind(search);
@@ -1435,7 +1497,12 @@ pub async fn list_client_tickets(
         query.push(" || '%')");
     }
 
-    if let Some(status) = params.status.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(status) = params
+        .status
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         query.push(" AND t.status = ");
         query.push_bind(normalize_status(status)?);
     }
@@ -1465,7 +1532,12 @@ pub async fn list_admin_tickets(
     let mut query = QueryBuilder::<Postgres>::new(SUMMARY_SELECT);
     query.push(" WHERE t.deleted_at IS NULL");
 
-    if let Some(search) = params.search.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(search) = params
+        .search
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         query.push(" AND (");
         query.push("t.subject ILIKE '%' || ");
         query.push_bind(search);
@@ -1476,7 +1548,12 @@ pub async fn list_admin_tickets(
         query.push(" || '%')");
     }
 
-    if let Some(status) = params.status.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(status) = params
+        .status
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         query.push(" AND t.status = ");
         query.push_bind(normalize_status(status)?);
     }
@@ -1491,7 +1568,12 @@ pub async fn list_admin_tickets(
         query.push_bind(assigned_user_uuid);
     }
 
-    if let Some(client) = params.client.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(client) = params
+        .client
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         query.push(" AND (creator.username ILIKE '%' || ");
         query.push_bind(client);
         query.push(" || '%' OR creator.email ILIKE '%' || ");
@@ -1499,7 +1581,12 @@ pub async fn list_admin_tickets(
         query.push(" || '%')");
     }
 
-    if let Some(server) = params.server.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(server) = params
+        .server
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         query.push(" AND COALESCE(t.linked_server_snapshot_name, '') ILIKE '%' || ");
         query.push_bind(server);
         query.push(" || '%'");
@@ -1535,6 +1622,52 @@ pub async fn create_ticket(
     attachments: Vec<IncomingAttachmentUpload>,
 ) -> Result<ApiTicketDetail, anyhow::Error> {
     let settings = get_or_create_settings_row(state).await?;
+
+    if settings.create_ticket_rate_limit_hits > 0 {
+        if state
+            .database
+            .cache
+            .ratelimit(
+                "support/tickets/create",
+                settings.create_ticket_rate_limit_hits as u64,
+                settings.create_ticket_rate_limit_window_seconds as u64,
+                user.uuid.to_string(),
+            )
+            .await
+            .is_err()
+        {
+            return Err(DisplayError::new(
+                "ticket creation rate limit reached, please try again in a few minutes",
+            )
+            .with_status(StatusCode::TOO_MANY_REQUESTS)
+            .into());
+        }
+    }
+
+    if settings.max_open_tickets_per_user > 0 {
+        let open_ticket_count: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM ext_support_tickets
+            WHERE creator_user_uuid = $1
+              AND deleted_at IS NULL
+              AND closed_at IS NULL
+            "#,
+        )
+        .bind(user.uuid)
+        .fetch_one(state.database.read())
+        .await?;
+
+        if open_ticket_count >= i64::from(settings.max_open_tickets_per_user) {
+            return Err(DisplayError::new(format!(
+                "you can only have {} open support tickets at a time",
+                settings.max_open_tickets_per_user
+            ))
+            .with_status(StatusCode::BAD_REQUEST)
+            .into());
+        }
+    }
+
     let subject = normalize_subject(&request.subject);
     let message = normalize_body(&request.message);
     if subject.is_empty() {
@@ -1566,7 +1699,9 @@ pub async fn create_ticket(
         Some(
             Server::by_user_identifier(&state.database, user, &identifier)
                 .await?
-                .ok_or_else(|| DisplayError::new("selected server was not found or is not accessible"))?,
+                .ok_or_else(|| {
+                    DisplayError::new("selected server was not found or is not accessible")
+                })?,
         )
     } else {
         None
@@ -1621,7 +1756,9 @@ pub async fn create_ticket(
     let actor = TicketActor {
         user_uuid: Some(user.uuid),
         username: user.username.as_str(),
-        display_name: format!("{} {}", user.name_first, user.name_last).trim().to_string(),
+        display_name: format!("{} {}", user.name_first, user.name_last)
+            .trim()
+            .to_string(),
         actor_type: TicketActorType::Client,
     };
 
@@ -1649,7 +1786,8 @@ pub async fn create_ticket(
     )
     .await?;
 
-    let detail = build_ticket_detail(state, ticket_uuid, false, false, AttachmentUrlScope::Client).await?;
+    let detail =
+        build_ticket_detail(state, ticket_uuid, false, false, AttachmentUrlScope::Client).await?;
 
     dispatch_discord_webhook_event(
         state,
@@ -1793,7 +1931,9 @@ pub async fn add_client_reply(
     let actor = TicketActor {
         user_uuid: Some(user.uuid),
         username: user.username.as_str(),
-        display_name: format!("{} {}", user.name_first, user.name_last).trim().to_string(),
+        display_name: format!("{} {}", user.name_first, user.name_last)
+            .trim()
+            .to_string(),
         actor_type: TicketActorType::Client,
     };
 
@@ -1839,7 +1979,8 @@ pub async fn add_client_reply(
     )
     .await?;
 
-    let detail = build_ticket_detail(state, ticket_uuid, false, false, AttachmentUrlScope::Client).await?;
+    let detail =
+        build_ticket_detail(state, ticket_uuid, false, false, AttachmentUrlScope::Client).await?;
 
     dispatch_discord_webhook_event(
         state,
@@ -1870,7 +2011,9 @@ pub async fn update_client_ticket_status(
     let actor = TicketActor {
         user_uuid: Some(user.uuid),
         username: user.username.as_str(),
-        display_name: format!("{} {}", user.name_first, user.name_last).trim().to_string(),
+        display_name: format!("{} {}", user.name_first, user.name_last)
+            .trim()
+            .to_string(),
         actor_type: TicketActorType::Client,
     };
 
@@ -1895,7 +2038,8 @@ pub async fn update_client_ticket_status(
             .execute(state.database.write())
             .await?;
 
-            insert_audit_event(state, ticket_uuid, Some(&actor), "ticket_closed", json!({})).await?;
+            insert_audit_event(state, ticket_uuid, Some(&actor), "ticket_closed", json!({}))
+                .await?;
         }
         "open" | "waiting_on_staff" => {
             if detail.ticket.status != TicketStatus::Closed.as_str() {
@@ -1916,12 +2060,20 @@ pub async fn update_client_ticket_status(
             .execute(state.database.write())
             .await?;
 
-            insert_audit_event(state, ticket_uuid, Some(&actor), "ticket_reopened", json!({})).await?;
+            insert_audit_event(
+                state,
+                ticket_uuid,
+                Some(&actor),
+                "ticket_reopened",
+                json!({}),
+            )
+            .await?;
         }
         _ => return Err(DisplayError::new("clients may only close or reopen tickets").into()),
     }
 
-    let next_detail = build_ticket_detail(state, ticket_uuid, false, false, AttachmentUrlScope::Client).await?;
+    let next_detail =
+        build_ticket_detail(state, ticket_uuid, false, false, AttachmentUrlScope::Client).await?;
 
     dispatch_discord_webhook_event(
         state,
@@ -1932,8 +2084,14 @@ pub async fn update_client_ticket_status(
             actor_username: Some(actor.username.to_string()),
             latest_message_html: None,
             extra_lines: vec![
-                format!("**Previous Status:** {}", detail.ticket.status.replace('_', " ")),
-                format!("**New Status:** {}", next_detail.ticket.status.replace('_', " ")),
+                format!(
+                    "**Previous Status:** {}",
+                    detail.ticket.status.replace('_', " ")
+                ),
+                format!(
+                    "**New Status:** {}",
+                    next_detail.ticket.status.replace('_', " ")
+                ),
             ],
         },
     )
@@ -1956,7 +2114,9 @@ pub async fn add_admin_message(
     let actor = TicketActor {
         user_uuid: Some(user.uuid),
         username: user.username.as_str(),
-        display_name: format!("{} {}", user.name_first, user.name_last).trim().to_string(),
+        display_name: format!("{} {}", user.name_first, user.name_last)
+            .trim()
+            .to_string(),
         actor_type: TicketActorType::Staff,
     };
 
@@ -2020,7 +2180,8 @@ pub async fn add_admin_message(
         .await?;
     }
 
-    let detail = build_ticket_detail(state, ticket_uuid, true, true, AttachmentUrlScope::Admin).await?;
+    let detail =
+        build_ticket_detail(state, ticket_uuid, true, true, AttachmentUrlScope::Admin).await?;
 
     dispatch_discord_webhook_event(
         state,
@@ -2036,8 +2197,14 @@ pub async fn add_admin_message(
             latest_message_html: Some(message),
             extra_lines: if previous_detail.ticket.status != detail.ticket.status {
                 vec![
-                    format!("**Previous Status:** {}", humanize_ticket_value(&previous_detail.ticket.status)),
-                    format!("**New Status:** {}", humanize_ticket_value(&detail.ticket.status)),
+                    format!(
+                        "**Previous Status:** {}",
+                        humanize_ticket_value(&previous_detail.ticket.status)
+                    ),
+                    format!(
+                        "**New Status:** {}",
+                        humanize_ticket_value(&detail.ticket.status)
+                    ),
                 ]
             } else {
                 Vec::new()
@@ -2060,7 +2227,9 @@ pub async fn update_admin_ticket_status(
     let actor = TicketActor {
         user_uuid: Some(user.uuid),
         username: user.username.as_str(),
-        display_name: format!("{} {}", user.name_first, user.name_last).trim().to_string(),
+        display_name: format!("{} {}", user.name_first, user.name_last)
+            .trim()
+            .to_string(),
         actor_type: TicketActorType::Staff,
     };
 
@@ -2096,7 +2265,8 @@ pub async fn update_admin_ticket_status(
     )
     .await?;
 
-    let detail = build_ticket_detail(state, ticket_uuid, true, true, AttachmentUrlScope::Admin).await?;
+    let detail =
+        build_ticket_detail(state, ticket_uuid, true, true, AttachmentUrlScope::Admin).await?;
 
     dispatch_discord_webhook_event(
         state,
@@ -2107,8 +2277,14 @@ pub async fn update_admin_ticket_status(
             actor_username: Some(actor.username.to_string()),
             latest_message_html: None,
             extra_lines: vec![
-                format!("**Previous Status:** {}", humanize_ticket_value(&previous_detail.ticket.status)),
-                format!("**New Status:** {}", humanize_ticket_value(&detail.ticket.status)),
+                format!(
+                    "**Previous Status:** {}",
+                    humanize_ticket_value(&previous_detail.ticket.status)
+                ),
+                format!(
+                    "**New Status:** {}",
+                    humanize_ticket_value(&detail.ticket.status)
+                ),
             ],
         },
     )
@@ -2133,7 +2309,9 @@ pub async fn assign_ticket(
     let actor = TicketActor {
         user_uuid: Some(user.uuid),
         username: user.username.as_str(),
-        display_name: format!("{} {}", user.name_first, user.name_last).trim().to_string(),
+        display_name: format!("{} {}", user.name_first, user.name_last)
+            .trim()
+            .to_string(),
         actor_type: TicketActorType::Staff,
     };
 
@@ -2162,7 +2340,8 @@ pub async fn assign_ticket(
     )
     .await?;
 
-    let detail = build_ticket_detail(state, ticket_uuid, true, true, AttachmentUrlScope::Admin).await?;
+    let detail =
+        build_ticket_detail(state, ticket_uuid, true, true, AttachmentUrlScope::Admin).await?;
 
     dispatch_discord_webhook_event(
         state,
@@ -2210,7 +2389,9 @@ pub async fn update_ticket_priority(
     let actor = TicketActor {
         user_uuid: Some(user.uuid),
         username: user.username.as_str(),
-        display_name: format!("{} {}", user.name_first, user.name_last).trim().to_string(),
+        display_name: format!("{} {}", user.name_first, user.name_last)
+            .trim()
+            .to_string(),
         actor_type: TicketActorType::Staff,
     };
 
@@ -2259,7 +2440,9 @@ pub async fn update_ticket_category(
     let actor = TicketActor {
         user_uuid: Some(user.uuid),
         username: user.username.as_str(),
-        display_name: format!("{} {}", user.name_first, user.name_last).trim().to_string(),
+        display_name: format!("{} {}", user.name_first, user.name_last)
+            .trim()
+            .to_string(),
         actor_type: TicketActorType::Staff,
     };
 
@@ -2300,7 +2483,9 @@ pub async fn soft_delete_ticket(
     let actor = TicketActor {
         user_uuid: Some(user.uuid),
         username: user.username.as_str(),
-        display_name: format!("{} {}", user.name_first, user.name_last).trim().to_string(),
+        display_name: format!("{} {}", user.name_first, user.name_last)
+            .trim()
+            .to_string(),
         actor_type: TicketActorType::Staff,
     };
 
@@ -2327,7 +2512,14 @@ pub async fn soft_delete_ticket(
             .into());
     }
 
-    insert_audit_event(state, ticket_uuid, Some(&actor), "ticket_deleted", json!({})).await?;
+    insert_audit_event(
+        state,
+        ticket_uuid,
+        Some(&actor),
+        "ticket_deleted",
+        json!({}),
+    )
+    .await?;
 
     dispatch_discord_webhook_event(
         state,
@@ -2345,7 +2537,10 @@ pub async fn soft_delete_ticket(
     Ok(())
 }
 
-pub async fn mark_linked_server_deleted(state: &State, server_uuid: uuid::Uuid) -> Result<(), anyhow::Error> {
+pub async fn mark_linked_server_deleted(
+    state: &State,
+    server_uuid: uuid::Uuid,
+) -> Result<(), anyhow::Error> {
     sqlx::query(
         r#"
         WITH updated AS (

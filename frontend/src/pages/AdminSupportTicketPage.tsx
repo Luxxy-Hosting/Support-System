@@ -5,9 +5,9 @@ import { httpErrorToHuman } from '@/api/axios.ts';
 import Button from '@/elements/Button.tsx';
 import Card from '@/elements/Card.tsx';
 import AdminContentContainer from '@/elements/containers/AdminContentContainer.tsx';
+import ConfirmationModal from '@/elements/modals/ConfirmationModal.tsx';
 import ScreenBlock from '@/elements/ScreenBlock.tsx';
 import Spinner from '@/elements/Spinner.tsx';
-import ConfirmationModal from '@/elements/modals/ConfirmationModal.tsx';
 import { useAdminCan } from '@/plugins/usePermissions.ts';
 import { useToast } from '@/providers/ToastProvider.tsx';
 import {
@@ -22,10 +22,11 @@ import {
   updateAdminTicketStatus,
 } from '../api/client.ts';
 import SupportAttachmentPicker from '../components/SupportAttachmentPicker.tsx';
+import SupportRichTextEditor from '../components/SupportRichTextEditor.tsx';
 import TicketConversation from '../components/TicketConversation.tsx';
 import TicketPriorityBadge from '../components/TicketPriorityBadge.tsx';
 import TicketStatusBadge from '../components/TicketStatusBadge.tsx';
-import SupportRichTextEditor from '../components/SupportRichTextEditor.tsx';
+import { isRichTextEmpty } from '../helpers/richText.ts';
 import {
   buildUserDisplayName,
   describeLinkedServer,
@@ -36,7 +37,6 @@ import {
   ticketPriorityOptions,
   ticketStatusOptions,
 } from '../helpers/tickets.ts';
-import { isRichTextEmpty } from '../helpers/richText.ts';
 import type { AdminTicketBootstrap, TicketDetail } from '../types/index.ts';
 
 function SidebarDetailRow({ label, value }: { label: string; value: ReactNode }) {
@@ -119,7 +119,7 @@ export default function AdminSupportTicketPage() {
   const [messageBody, setMessageBody] = useState('');
   const [messageAttachments, setMessageAttachments] = useState<File[]>([]);
   const [composerLoading, setComposerLoading] = useState(false);
-  const [controlLoading, setControlLoading] = useState(false);
+  const [_controlLoading, setControlLoading] = useState(false);
   const [savingControl, setSavingControl] = useState<'status' | 'priority' | 'category' | 'assignee' | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -197,9 +197,7 @@ export default function AdminSupportTicketPage() {
     ? `/admin/servers/${detail.ticket.linkedServer.uuid}`
     : null;
   const creatorAdminUserPath = detail ? `/admin/users/${detail.ticket.creator.uuid}` : null;
-  const assignedAdminUserPath = detail?.ticket.assignedUser
-    ? `/admin/users/${detail.ticket.assignedUser.uuid}`
-    : null;
+  const assignedAdminUserPath = detail?.ticket.assignedUser ? `/admin/users/${detail.ticket.assignedUser.uuid}` : null;
 
   const syncDetail = (nextTicket: TicketDetail, options?: { preserveMessageBody?: boolean }) => {
     setDetail(nextTicket);
@@ -220,13 +218,14 @@ export default function AdminSupportTicketPage() {
 
     try {
       setComposerLoading(true);
-      const nextTicket = messageAttachments.length > 0
-        ? await addAdminMessageUpload(ticketUuid, {
-            body: isRichTextEmpty(messageBody) ? '' : messageBody,
-            isInternal,
-            files: messageAttachments,
-          })
-        : await addAdminMessage(ticketUuid, messageBody, isInternal);
+      const nextTicket =
+        messageAttachments.length > 0
+          ? await addAdminMessageUpload(ticketUuid, {
+              body: isRichTextEmpty(messageBody) ? '' : messageBody,
+              isInternal,
+              files: messageAttachments,
+            })
+          : await addAdminMessage(ticketUuid, messageBody, isInternal);
       syncDetail(nextTicket);
       addToast(isInternal ? 'Internal note saved.' : 'Reply sent to client.', 'success');
     } catch (error) {
@@ -516,20 +515,17 @@ export default function AdminSupportTicketPage() {
                     Ticket
                   </Text>
                   <Stack gap={8}>
-                    <SidebarDetailRow
-                      label='Category'
-                      value={detail.ticket.category?.name ?? 'Uncategorized'}
-                    />
+                    <SidebarDetailRow label='Category' value={detail.ticket.category?.name ?? 'Uncategorized'} />
                     <SidebarDetailRow
                       label='Assigned To'
                       value={
-                        assignedAdminUserPath && detail.ticket.assignedUser
-                          ? (
-                              <SidebarValueLink to={assignedAdminUserPath}>
-                                {buildUserDisplayName(detail.ticket.assignedUser)}
-                              </SidebarValueLink>
-                            )
-                          : buildUserDisplayName(detail.ticket.assignedUser)
+                        assignedAdminUserPath && detail.ticket.assignedUser ? (
+                          <SidebarValueLink to={assignedAdminUserPath}>
+                            {buildUserDisplayName(detail.ticket.assignedUser)}
+                          </SidebarValueLink>
+                        ) : (
+                          buildUserDisplayName(detail.ticket.assignedUser)
+                        )
                       }
                     />
                     <SidebarDetailRow
@@ -537,10 +533,7 @@ export default function AdminSupportTicketPage() {
                       value={formatTicketDateTime(detail.ticket.lastReplyAt ?? detail.ticket.created)}
                     />
                     {detail.ticket.closedAt && (
-                      <SidebarDetailRow
-                        label='Closed'
-                        value={formatTicketDateTime(detail.ticket.closedAt)}
-                      />
+                      <SidebarDetailRow label='Closed' value={formatTicketDateTime(detail.ticket.closedAt)} />
                     )}
                   </Stack>
                 </div>
@@ -555,13 +548,13 @@ export default function AdminSupportTicketPage() {
                     <SidebarDetailRow
                       label='Linked Server'
                       value={
-                        linkedAdminServerPath
-                          ? (
-                              <SidebarValueLink to={linkedAdminServerPath}>
-                                {describeLinkedServer(detail.ticket.linkedServer)}
-                              </SidebarValueLink>
-                            )
-                          : describeLinkedServer(detail.ticket.linkedServer)
+                        linkedAdminServerPath ? (
+                          <SidebarValueLink to={linkedAdminServerPath}>
+                            {describeLinkedServer(detail.ticket.linkedServer)}
+                          </SidebarValueLink>
+                        ) : (
+                          describeLinkedServer(detail.ticket.linkedServer)
+                        )
                       }
                     />
                     {detail.ticket.linkedServer.currentStatus && (
@@ -573,25 +566,25 @@ export default function AdminSupportTicketPage() {
                     <SidebarDetailRow
                       label='Client'
                       value={
-                        creatorAdminUserPath
-                          ? (
-                              <SidebarValueLink to={creatorAdminUserPath}>
-                                {`${detail.ticket.creator.nameFirst} ${detail.ticket.creator.nameLast}`}
-                              </SidebarValueLink>
-                            )
-                          : `${detail.ticket.creator.nameFirst} ${detail.ticket.creator.nameLast}`
+                        creatorAdminUserPath ? (
+                          <SidebarValueLink to={creatorAdminUserPath}>
+                            {`${detail.ticket.creator.nameFirst} ${detail.ticket.creator.nameLast}`}
+                          </SidebarValueLink>
+                        ) : (
+                          `${detail.ticket.creator.nameFirst} ${detail.ticket.creator.nameLast}`
+                        )
                       }
                     />
                     <SidebarDetailRow
                       label='Username'
                       value={
-                        creatorAdminUserPath
-                          ? (
-                              <SidebarValueLink to={creatorAdminUserPath}>
-                                @{detail.ticket.creator.username}
-                              </SidebarValueLink>
-                            )
-                          : `@${detail.ticket.creator.username}`
+                        creatorAdminUserPath ? (
+                          <SidebarValueLink to={creatorAdminUserPath}>
+                            @{detail.ticket.creator.username}
+                          </SidebarValueLink>
+                        ) : (
+                          `@${detail.ticket.creator.username}`
+                        )
                       }
                     />
                   </Stack>
@@ -620,7 +613,10 @@ export default function AdminSupportTicketPage() {
                 )}
               </Card>
 
-              <Card className='support-ticket-panel support-ticket-audit-panel support-ticket-sidebar-card' padding='sm'>
+              <Card
+                className='support-ticket-panel support-ticket-audit-panel support-ticket-sidebar-card'
+                padding='sm'
+              >
                 <Text fw={600} mb='sm'>
                   Audit Timeline
                 </Text>
@@ -632,7 +628,8 @@ export default function AdminSupportTicketPage() {
                           {humanizeAuditEvent(event)}
                         </Text>
                         <Text size='xs' c='dimmed'>
-                          {event.actorUsername ? `@${event.actorUsername}` : 'System'} • {formatTicketDateTime(event.created)}
+                          {event.actorUsername ? `@${event.actorUsername}` : 'System'} •{' '}
+                          {formatTicketDateTime(event.created)}
                         </Text>
                       </div>
                     ))

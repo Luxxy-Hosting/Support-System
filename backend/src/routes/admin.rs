@@ -16,11 +16,17 @@ use axum::{
 use serde::Serialize;
 use shared::{
     ApiError, GetState, Payload,
-    models::{admin_activity::GetAdminActivityLogger, user::{GetPermissionManager, GetUser}},
+    models::{
+        admin_activity::GetAdminActivityLogger,
+        user::{GetPermissionManager, GetUser},
+    },
     response::{ApiResponse, ApiResponseResult},
 };
 use utoipa::ToSchema;
-use utoipa_axum::{router::{OpenApiRouter, UtoipaMethodRouterExt}, routes};
+use utoipa_axum::{
+    router::{OpenApiRouter, UtoipaMethodRouterExt},
+    routes,
+};
 
 use super::State;
 
@@ -153,7 +159,8 @@ mod get_attachment {
     ) -> ApiResponseResult {
         permissions.has_admin_permission("tickets.view-all")?;
 
-        let attachment = manager::get_admin_attachment_download(&state, ticket_uuid, attachment_uuid).await?;
+        let attachment =
+            manager::get_admin_attachment_download(&state, ticket_uuid, attachment_uuid).await?;
 
         ApiResponse::new(Body::from(attachment.bytes))
             .with_header("Content-Type", attachment.content_type)
@@ -212,7 +219,11 @@ mod add_message {
 
         activity_logger
             .log(
-                if request.is_internal { "tickets:add_internal_note" } else { "tickets:reply" },
+                if request.is_internal {
+                    "tickets:add_internal_note"
+                } else {
+                    "tickets:reply"
+                },
                 serde_json::json!({
                     "ticket_uuid": ticket.ticket.uuid,
                 }),
@@ -267,7 +278,11 @@ mod add_message_upload {
 
         activity_logger
             .log(
-                if is_internal { "tickets:add_internal_note" } else { "tickets:reply" },
+                if is_internal {
+                    "tickets:add_internal_note"
+                } else {
+                    "tickets:reply"
+                },
                 serde_json::json!({
                     "ticket_uuid": ticket.ticket.uuid,
                 }),
@@ -308,7 +323,9 @@ mod update_status {
                 .ok();
         }
 
-        let ticket = manager::update_admin_ticket_status(&state, &user, ticket_uuid, &request.status).await?;
+        let ticket =
+            manager::update_admin_ticket_status(&state, &user, ticket_uuid, &request.status)
+                .await?;
 
         activity_logger
             .log(
@@ -348,7 +365,8 @@ mod assign_ticket {
     ) -> ApiResponseResult {
         permissions.has_admin_permission("tickets.assign")?;
 
-        let ticket = manager::assign_ticket(&state, &user, ticket_uuid, request.assigned_user_uuid).await?;
+        let ticket =
+            manager::assign_ticket(&state, &user, ticket_uuid, request.assigned_user_uuid).await?;
 
         activity_logger
             .log(
@@ -388,7 +406,13 @@ mod update_priority {
     ) -> ApiResponseResult {
         permissions.has_admin_permission("tickets.change-status")?;
 
-        let ticket = manager::update_ticket_priority(&state, &user, ticket_uuid, request.priority.as_deref()).await?;
+        let ticket = manager::update_ticket_priority(
+            &state,
+            &user,
+            ticket_uuid,
+            request.priority.as_deref(),
+        )
+        .await?;
 
         activity_logger
             .log(
@@ -428,7 +452,9 @@ mod update_category {
     ) -> ApiResponseResult {
         permissions.has_admin_permission("tickets.change-status")?;
 
-        let ticket = manager::update_ticket_category(&state, &user, ticket_uuid, request.category_uuid).await?;
+        let ticket =
+            manager::update_ticket_category(&state, &user, ticket_uuid, request.category_uuid)
+                .await?;
 
         activity_logger
             .log(
@@ -526,6 +552,9 @@ mod update_settings {
             request.categories_enabled,
             request.allow_client_close,
             request.allow_reply_on_closed,
+            request.create_ticket_rate_limit_hits,
+            request.create_ticket_rate_limit_window_seconds,
+            request.max_open_tickets_per_user,
             request.discord_webhook_enabled,
             request.discord_webhook_url,
             request.discord_notify_on_ticket_created,
@@ -545,6 +574,9 @@ mod update_settings {
                     "categories_enabled": settings.settings.categories_enabled,
                     "allow_client_close": settings.settings.allow_client_close,
                     "allow_reply_on_closed": settings.settings.allow_reply_on_closed,
+                    "create_ticket_rate_limit_hits": settings.settings.create_ticket_rate_limit_hits,
+                    "create_ticket_rate_limit_window_seconds": settings.settings.create_ticket_rate_limit_window_seconds,
+                    "max_open_tickets_per_user": settings.settings.max_open_tickets_per_user,
                     "discord_webhook_enabled": settings.discord_webhook.enabled,
                 }),
             )
@@ -595,7 +627,11 @@ mod upsert_category {
 
         activity_logger
             .log(
-                if request.uuid.is_some() { "tickets:update_category_definition" } else { "tickets:create_category" },
+                if request.uuid.is_some() {
+                    "tickets:update_category_definition"
+                } else {
+                    "tickets:create_category"
+                },
                 serde_json::json!({
                     "category_uuid": category.uuid,
                     "name": category.name,

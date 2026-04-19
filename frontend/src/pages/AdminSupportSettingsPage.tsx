@@ -1,19 +1,19 @@
-import { Group, NumberInput, Select as MantineSelect, SimpleGrid, Stack, Switch, Text, Title } from '@mantine/core';
+import { Group, Select as MantineSelect, NumberInput, SimpleGrid, Stack, Switch, Text, Title } from '@mantine/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { httpErrorToHuman } from '@/api/axios.ts';
 import Button from '@/elements/Button.tsx';
 import Card from '@/elements/Card.tsx';
-import ScreenBlock from '@/elements/ScreenBlock.tsx';
-import Spinner from '@/elements/Spinner.tsx';
 import TextInput from '@/elements/input/TextInput.tsx';
 import ConfirmationModal from '@/elements/modals/ConfirmationModal.tsx';
+import ScreenBlock from '@/elements/ScreenBlock.tsx';
+import Spinner from '@/elements/Spinner.tsx';
 import { useAdminCan } from '@/plugins/usePermissions.ts';
 import { useToast } from '@/providers/ToastProvider.tsx';
 import {
   deleteAdminCategory,
-  getAdminSettingsDetail,
   getAdminBootstrap,
+  getAdminSettingsDetail,
   updateAdminSettings,
   upsertAdminCategory,
 } from '../api/client.ts';
@@ -23,6 +23,9 @@ const defaultSettingsForm = {
   categoriesEnabled: true,
   allowClientClose: true,
   allowReplyOnClosed: false,
+  createTicketRateLimitHits: 20,
+  createTicketRateLimitWindowSeconds: 300,
+  maxOpenTicketsPerUser: 0,
   discordWebhookEnabled: false,
   discordWebhookUrl: '',
   discordNotifyOnTicketCreated: true,
@@ -34,14 +37,14 @@ const defaultSettingsForm = {
   discordNotifyOnTicketDeleted: false,
 };
 
-function buildSettingsForm(
-  bootstrap: AdminTicketBootstrap,
-  detail: AdminTicketSettingsDetail | null,
-) {
+function buildSettingsForm(bootstrap: AdminTicketBootstrap, detail: AdminTicketSettingsDetail | null) {
   return {
     categoriesEnabled: bootstrap.settings.categoriesEnabled,
     allowClientClose: bootstrap.settings.allowClientClose,
     allowReplyOnClosed: bootstrap.settings.allowReplyOnClosed,
+    createTicketRateLimitHits: bootstrap.settings.createTicketRateLimitHits,
+    createTicketRateLimitWindowSeconds: bootstrap.settings.createTicketRateLimitWindowSeconds,
+    maxOpenTicketsPerUser: bootstrap.settings.maxOpenTicketsPerUser,
     discordWebhookEnabled: detail?.discordWebhook.enabled ?? false,
     discordWebhookUrl: detail?.discordWebhook.webhookUrl ?? '',
     discordNotifyOnTicketCreated: detail?.discordWebhook.notifyOnTicketCreated ?? true,
@@ -82,10 +85,7 @@ export default function AdminSupportSettingsPage() {
   const load = () => {
     setLoading(true);
     setFatalError(null);
-    Promise.all([
-      getAdminBootstrap(),
-      canManageSettings ? getAdminSettingsDetail() : Promise.resolve(null),
-    ])
+    Promise.all([getAdminBootstrap(), canManageSettings ? getAdminSettingsDetail() : Promise.resolve(null)])
       .then(([bootstrapResponse, settingsDetail]) => {
         setBootstrap(bootstrapResponse);
         setSettingsForm(buildSettingsForm(bootstrapResponse, settingsDetail));
@@ -146,6 +146,9 @@ export default function AdminSupportSettingsPage() {
       categoriesEnabled: response.settings.categoriesEnabled,
       allowClientClose: response.settings.allowClientClose,
       allowReplyOnClosed: response.settings.allowReplyOnClosed,
+      createTicketRateLimitHits: response.settings.createTicketRateLimitHits,
+      createTicketRateLimitWindowSeconds: response.settings.createTicketRateLimitWindowSeconds,
+      maxOpenTicketsPerUser: response.settings.maxOpenTicketsPerUser,
     }));
   };
 
@@ -156,6 +159,12 @@ export default function AdminSupportSettingsPage() {
       setBootstrap((current) => (current ? { ...current, settings: settings.settings } : current));
       setSettingsForm((current) => ({
         ...current,
+        categoriesEnabled: settings.settings.categoriesEnabled,
+        allowClientClose: settings.settings.allowClientClose,
+        allowReplyOnClosed: settings.settings.allowReplyOnClosed,
+        createTicketRateLimitHits: settings.settings.createTicketRateLimitHits,
+        createTicketRateLimitWindowSeconds: settings.settings.createTicketRateLimitWindowSeconds,
+        maxOpenTicketsPerUser: settings.settings.maxOpenTicketsPerUser,
         discordWebhookEnabled: settings.discordWebhook.enabled,
         discordWebhookUrl: settings.discordWebhook.webhookUrl ?? '',
         discordNotifyOnTicketCreated: settings.discordWebhook.notifyOnTicketCreated,
@@ -220,7 +229,9 @@ export default function AdminSupportSettingsPage() {
   }
 
   if (fatalError || !bootstrap) {
-    return <ScreenBlock title='Support Settings Unavailable' content={fatalError ?? 'Unable to load support settings.'} />;
+    return (
+      <ScreenBlock title='Support Settings Unavailable' content={fatalError ?? 'Unable to load support settings.'} />
+    );
   }
 
   return (
@@ -232,7 +243,9 @@ export default function AdminSupportSettingsPage() {
         confirm='Delete Category'
         onConfirmed={handleDeleteCategory}
       >
-        <Text size='sm'>Deleting a category does not delete tickets. Tickets simply lose that category assignment.</Text>
+        <Text size='sm'>
+          Deleting a category does not delete tickets. Tickets simply lose that category assignment.
+        </Text>
       </ConfirmationModal>
 
       <Stack gap='md' mt='md'>
@@ -254,25 +267,42 @@ export default function AdminSupportSettingsPage() {
         <Card p='md'>
           <Text fw={700}>Overview</Text>
           <Text c='dimmed' size='sm'>
-            This page controls the support system extension configuration mounted at `/admin/extensions/dev.luxxy.supportsystem`.
+            This page controls the support system extension configuration mounted at
+            `/admin/extensions/dev.luxxy.supportsystem`.
           </Text>
 
           <SimpleGrid cols={{ base: 1, md: 2, xl: 4 }} mt='sm'>
             <div>
-              <Text size='xs' c='dimmed'>Categories</Text>
+              <Text size='xs' c='dimmed'>
+                Categories
+              </Text>
               <Text fw={600}>{bootstrap.categories.length}</Text>
             </div>
             <div>
-              <Text size='xs' c='dimmed'>Enabled Categories</Text>
+              <Text size='xs' c='dimmed'>
+                Enabled Categories
+              </Text>
               <Text fw={600}>{enabledCategoryCount}</Text>
             </div>
             <div>
-              <Text size='xs' c='dimmed'>Staff Users</Text>
+              <Text size='xs' c='dimmed'>
+                Staff Users
+              </Text>
               <Text fw={600}>{bootstrap.staffUsers.length}</Text>
             </div>
             <div>
-              <Text size='xs' c='dimmed'>Client Close</Text>
+              <Text size='xs' c='dimmed'>
+                Client Close
+              </Text>
               <Text fw={600}>{bootstrap.settings.allowClientClose ? 'Enabled' : 'Disabled'}</Text>
+            </div>
+            <div>
+              <Text size='xs' c='dimmed'>
+                Max Open Tickets
+              </Text>
+              <Text fw={600}>
+                {bootstrap.settings.maxOpenTicketsPerUser > 0 ? bootstrap.settings.maxOpenTicketsPerUser : 'Unlimited'}
+              </Text>
             </div>
           </SimpleGrid>
         </Card>
@@ -318,6 +348,45 @@ export default function AdminSupportSettingsPage() {
                         setSettingsForm((current) => ({
                           ...current,
                           allowReplyOnClosed: event.currentTarget.checked,
+                        }))
+                      }
+                    />
+                    <NumberInput
+                      label='Create Ticket Rate Limit Hits'
+                      description='How many new tickets a user can open per rate limit window. Set to 0 to disable this limiter.'
+                      min={0}
+                      max={10000}
+                      value={settingsForm.createTicketRateLimitHits}
+                      onChange={(value) =>
+                        setSettingsForm((current) => ({
+                          ...current,
+                          createTicketRateLimitHits: typeof value === 'number' ? value : 0,
+                        }))
+                      }
+                    />
+                    <NumberInput
+                      label='Create Ticket Rate Limit Window'
+                      description='Window length in seconds for the ticket creation limiter.'
+                      min={1}
+                      max={86400}
+                      value={settingsForm.createTicketRateLimitWindowSeconds}
+                      onChange={(value) =>
+                        setSettingsForm((current) => ({
+                          ...current,
+                          createTicketRateLimitWindowSeconds: typeof value === 'number' ? value : 300,
+                        }))
+                      }
+                    />
+                    <NumberInput
+                      label='Max Open Tickets Per User'
+                      description='Set to 0 to allow unlimited open tickets per user.'
+                      min={0}
+                      max={1000}
+                      value={settingsForm.maxOpenTicketsPerUser}
+                      onChange={(value) =>
+                        setSettingsForm((current) => ({
+                          ...current,
+                          maxOpenTicketsPerUser: typeof value === 'number' ? value : 0,
                         }))
                       }
                     />
@@ -457,7 +526,9 @@ export default function AdminSupportSettingsPage() {
                   <TextInput
                     label='Name'
                     value={categoryForm.name}
-                    onChange={(event) => setCategoryForm((current) => ({ ...current, name: event.currentTarget.value }))}
+                    onChange={(event) =>
+                      setCategoryForm((current) => ({ ...current, name: event.currentTarget.value }))
+                    }
                   />
 
                   <TextInput
@@ -472,7 +543,9 @@ export default function AdminSupportSettingsPage() {
                     label='Color'
                     placeholder='#4f46e5'
                     value={categoryForm.color}
-                    onChange={(event) => setCategoryForm((current) => ({ ...current, color: event.currentTarget.value }))}
+                    onChange={(event) =>
+                      setCategoryForm((current) => ({ ...current, color: event.currentTarget.value }))
+                    }
                   />
 
                   <NumberInput

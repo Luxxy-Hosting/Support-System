@@ -14,11 +14,17 @@ use axum::{
 use serde::Serialize;
 use shared::{
     ApiError, GetState, Payload,
-    models::{user::{GetPermissionManager, GetUser}, user_activity::GetUserActivityLogger},
+    models::{
+        user::{GetPermissionManager, GetUser},
+        user_activity::GetUserActivityLogger,
+    },
     response::{ApiResponse, ApiResponseResult},
 };
 use utoipa::ToSchema;
-use utoipa_axum::{router::{OpenApiRouter, UtoipaMethodRouterExt}, routes};
+use utoipa_axum::{
+    router::{OpenApiRouter, UtoipaMethodRouterExt},
+    routes,
+};
 
 use super::State;
 
@@ -230,7 +236,8 @@ mod get_attachment {
         permissions.has_user_permission("tickets.view-own")?;
 
         let attachment =
-            manager::get_client_attachment_download(&state, &user, ticket_uuid, attachment_uuid).await?;
+            manager::get_client_attachment_download(&state, &user, ticket_uuid, attachment_uuid)
+                .await?;
 
         ApiResponse::new(Body::from(attachment.bytes))
             .with_header("Content-Type", attachment.content_type)
@@ -273,7 +280,9 @@ mod reply_ticket {
                 .ok();
         }
 
-        let ticket = manager::add_client_reply(&state, &user, ticket_uuid, &request.body, Vec::new()).await?;
+        let ticket =
+            manager::add_client_reply(&state, &user, ticket_uuid, &request.body, Vec::new())
+                .await?;
 
         activity_logger
             .log(
@@ -313,7 +322,9 @@ mod reply_ticket_upload {
         permissions.has_user_permission("tickets.reply-own")?;
 
         let form = multipart::parse_message_form(multipart).await?;
-        let ticket = manager::add_client_reply(&state, &user, ticket_uuid, &form.body, form.attachments).await?;
+        let ticket =
+            manager::add_client_reply(&state, &user, ticket_uuid, &form.body, form.attachments)
+                .await?;
 
         activity_logger
             .log(
@@ -358,7 +369,9 @@ mod update_status {
                 .ok();
         }
 
-        let ticket = manager::update_client_ticket_status(&state, &user, ticket_uuid, &request.status).await?;
+        let ticket =
+            manager::update_client_ticket_status(&state, &user, ticket_uuid, &request.status)
+                .await?;
 
         activity_logger
             .log(

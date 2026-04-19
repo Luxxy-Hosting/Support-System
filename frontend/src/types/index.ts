@@ -10,6 +10,9 @@ export interface TicketSettings {
   categoriesEnabled: boolean;
   allowClientClose: boolean;
   allowReplyOnClosed: boolean;
+  createTicketRateLimitHits: number;
+  createTicketRateLimitWindowSeconds: number;
+  maxOpenTicketsPerUser: number;
   created: string;
   updated: string;
 }

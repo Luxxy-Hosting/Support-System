@@ -21,14 +21,19 @@
 
 .support-ticket-richtext-input .tiptap.ProseMirror {
   min-height: 10rem;
+  max-height: 14rem;
   padding: 0.875rem 1rem;
   color: var(--mantine-color-text);
   outline: none;
-  overflow-y: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .support-ticket-richtext-input {
-  overflow: visible;
+  overflow: hidden;
 }
 
 .support-ticket-richtext-input .tiptap.ProseMirror p.is-editor-empty:first-child::before {

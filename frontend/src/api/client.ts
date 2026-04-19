@@ -4,10 +4,62 @@ import type {
   AdminTicketSettingsDetail,
   ClientTicketBootstrap,
   Paginated,
+  TicketAttachment,
   TicketCategory,
   TicketDetail,
+  TicketLinkedServer,
+  TicketMessage,
   TicketSummary,
 } from '../types/index.ts';
+
+const emptyLinkedServer = (): TicketLinkedServer => ({
+  uuid: null,
+  snapshotName: null,
+  snapshotUuidShort: null,
+  deletedAt: null,
+  currentName: null,
+  currentUuidShort: null,
+  currentStatus: null,
+  currentIsSuspended: null,
+  currentOwnerUsername: null,
+});
+
+const normalizeAttachment = (attachment: Partial<TicketAttachment> | null | undefined): TicketAttachment => ({
+  uuid: attachment?.uuid ?? '',
+  originalName: attachment?.originalName ?? 'Attachment',
+  contentType: attachment?.contentType ?? 'application/octet-stream',
+  mediaType: attachment?.mediaType === 'video' ? 'video' : 'image',
+  size: typeof attachment?.size === 'number' ? attachment.size : 0,
+  url: attachment?.url ?? '',
+  created: attachment?.created ?? new Date(0).toISOString(),
+});
+
+const normalizeMessage = (message: Partial<TicketMessage> | null | undefined): TicketMessage => ({
+  uuid: message?.uuid ?? '',
+  authorUserUuid: message?.authorUserUuid ?? null,
+  authorUsername: message?.authorUsername ?? 'system',
+  authorDisplayName: message?.authorDisplayName ?? message?.authorUsername ?? 'System',
+  authorAvatar: message?.authorAvatar ?? null,
+  authorType: message?.authorType ?? 'system',
+  body: typeof message?.body === 'string' ? message.body : '',
+  isInternal: Boolean(message?.isInternal),
+  attachments: Array.isArray(message?.attachments) ? message.attachments.map(normalizeAttachment) : [],
+  created: message?.created ?? new Date(0).toISOString(),
+  updated: message?.updated ?? message?.created ?? new Date(0).toISOString(),
+});
+
+const normalizeTicketDetail = (detail: TicketDetail): TicketDetail => ({
+  ...detail,
+  ticket: {
+    ...detail.ticket,
+    linkedServer: detail?.ticket?.linkedServer ?? emptyLinkedServer(),
+    assignedUser: detail?.ticket?.assignedUser ?? null,
+    category: detail?.ticket?.category ?? null,
+  },
+  metadata: detail && typeof detail.metadata === 'object' && detail.metadata !== null ? detail.metadata : {},
+  messages: Array.isArray(detail?.messages) ? detail.messages.map(normalizeMessage) : [],
+  auditEvents: Array.isArray(detail?.auditEvents) ? detail.auditEvents : [],
+});
 
 export interface ClientTicketListParams {
   page: number;
@@ -61,7 +113,7 @@ export const createClientTicket = async (payload: {
     metadata: payload.metadata,
   });
 
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
 export const createClientTicketUpload = async (payload: {
@@ -98,17 +150,17 @@ export const createClientTicketUpload = async (payload: {
     },
   });
 
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
 export const getClientTicket = async (ticketUuid: string): Promise<TicketDetail> => {
   const { data } = await axiosInstance.get(`/api/client/support/tickets/${ticketUuid}`);
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
 export const addClientReply = async (ticketUuid: string, body: string): Promise<TicketDetail> => {
   const { data } = await axiosInstance.post(`/api/client/support/tickets/${ticketUuid}/messages`, { body });
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
 export const addClientReplyUpload = async (
@@ -128,12 +180,12 @@ export const addClientReplyUpload = async (
     },
   });
 
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
 export const updateClientTicketStatus = async (ticketUuid: string, status: string): Promise<TicketDetail> => {
   const { data } = await axiosInstance.patch(`/api/client/support/tickets/${ticketUuid}/status`, { status });
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
 export const getAdminBootstrap = async (): Promise<AdminTicketBootstrap> => {
@@ -166,7 +218,7 @@ export const getAdminTickets = async (params: AdminTicketListParams): Promise<Pa
 
 export const getAdminTicket = async (ticketUuid: string): Promise<TicketDetail> => {
   const { data } = await axiosInstance.get(`/api/admin/support/tickets/${ticketUuid}`);
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
 export const addAdminMessage = async (ticketUuid: string, body: string, isInternal: boolean): Promise<TicketDetail> => {
@@ -175,7 +227,7 @@ export const addAdminMessage = async (ticketUuid: string, body: string, isIntern
     isInternal,
   });
 
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
 export const addAdminMessageUpload = async (
@@ -196,31 +248,25 @@ export const addAdminMessageUpload = async (
     },
   });
 
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
 export const updateAdminTicketStatus = async (ticketUuid: string, status: string): Promise<TicketDetail> => {
   const { data } = await axiosInstance.patch(`/api/admin/support/tickets/${ticketUuid}/status`, { status });
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
-export const assignAdminTicket = async (
-  ticketUuid: string,
-  assignedUserUuid: string | null,
-): Promise<TicketDetail> => {
+export const assignAdminTicket = async (ticketUuid: string, assignedUserUuid: string | null): Promise<TicketDetail> => {
   const { data } = await axiosInstance.patch(`/api/admin/support/tickets/${ticketUuid}/assignee`, {
     assignedUserUuid,
   });
 
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
-export const updateAdminTicketPriority = async (
-  ticketUuid: string,
-  priority: string | null,
-): Promise<TicketDetail> => {
+export const updateAdminTicketPriority = async (ticketUuid: string, priority: string | null): Promise<TicketDetail> => {
   const { data } = await axiosInstance.patch(`/api/admin/support/tickets/${ticketUuid}/priority`, { priority });
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
 export const updateAdminTicketCategory = async (
@@ -228,7 +274,7 @@ export const updateAdminTicketCategory = async (
   categoryUuid: string | null,
 ): Promise<TicketDetail> => {
   const { data } = await axiosInstance.patch(`/api/admin/support/tickets/${ticketUuid}/category`, { categoryUuid });
-  return data.ticket;
+  return normalizeTicketDetail(data.ticket);
 };
 
 export const deleteAdminTicket = async (ticketUuid: string): Promise<void> => {
@@ -239,6 +285,9 @@ export const updateAdminSettings = async (payload: {
   categoriesEnabled: boolean;
   allowClientClose: boolean;
   allowReplyOnClosed: boolean;
+  createTicketRateLimitHits: number;
+  createTicketRateLimitWindowSeconds: number;
+  maxOpenTicketsPerUser: number;
   discordWebhookEnabled: boolean;
   discordWebhookUrl?: string | null;
   discordNotifyOnTicketCreated: boolean;
