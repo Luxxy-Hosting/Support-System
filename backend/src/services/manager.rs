@@ -586,15 +586,20 @@ async fn load_attachment_bytes_from_storage(
 
     match &settings.storage_driver {
         shared::settings::StorageDriver::Filesystem { .. } => {
+            let base_dir = storage_path.split('/').next().unwrap_or(storage_path);
             let base_filesystem = settings
                 .storage_driver
-                .get_cap_filesystem()
+                .get_cap_filesystem(base_dir)
                 .await
                 .expect("filesystem storage driver must provide a filesystem")?;
             drop(settings);
 
+            let relative_path = storage_path
+                .strip_prefix(&format!("{base_dir}/"))
+                .unwrap_or(storage_path);
+
             let mut file = base_filesystem
-                .async_open(storage_path)
+                .async_open(relative_path)
                 .await
                 .map_err(|err| {
                     if err

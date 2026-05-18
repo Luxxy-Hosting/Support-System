@@ -20,7 +20,10 @@ sqlx = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 futures-util = { workspace = true }
-rust-s3 = { workspace = true }
+
+# Fixed: this is not in the root Calagopus workspace dependencies
+rust-s3 = "0.35"
+
 reqwest = { workspace = true }
 utoipa = { workspace = true }
 utoipa-axum = { workspace = true }

@@ -1,0 +1,2 @@
+hello! if you are seeing this you are either in your editor or at http://<panel url>/mypublicfile.txt.
+if you wish you can remove this folder, its not required.
